@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "craftify-docs",
+  "compatibility_date": "2026-08-24",
+  "assets": {
+    "directory": "./docs/.vitepress/dist",
+    "not_found_handling": "404-page",
+  },
+  "routes": [
+    {
+      "pattern": "craftify.kyizl.is-a.dev",
+      "custom_domain": true,
+    },
+  ],
+}

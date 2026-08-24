@@ -1,0 +1,8 @@
+dist
+node_modules
+coverage
+docs/.vitepress/dist
+docs/.vitepress/cache
+docs/api
+data/pika-crawl.json
+docs/.vitepress/.temp

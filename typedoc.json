@@ -1,0 +1,32 @@
+{
+  "entryPoints": ["./src/index.ts"],
+  "tsconfig": "./tsconfig.typedoc.json",
+  "plugin": ["typedoc-plugin-markdown", "typedoc-vitepress-theme"],
+  "docsRoot": "./docs",
+  "out": "./docs/api",
+  "readme": "none",
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeExternals": true,
+  "excludeInternal": true,
+  "disableSources": true,
+  "hideGenerator": true,
+  "hideBreadcrumbs": true,
+  "hidePageHeader": true,
+  "expandParameters": true,
+  "useCodeBlocks": true,
+  "indexFormat": "table",
+  "parametersFormat": "table",
+  "propertiesFormat": "table",
+  "enumMembersFormat": "table",
+  "textContentMappings": {
+    "title.indexPage": "API Reference"
+  },
+  "sidebar": {
+    "autoConfiguration": true,
+    "format": "vitepress",
+    "collapsed": true,
+    "pretty": true
+  },
+  "exclude": ["**/node_modules/**", "docs/**"]
+}

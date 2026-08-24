@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/index.ts",
+    "docs/.vitepress/config.ts",
+    "docs/.vitepress/theme/index.ts",
+    "docs/.vitepress/**/*.data.ts",
+  ],
+  "project": ["src/**/*.ts", "docs/.vitepress/**/*.ts"],
+  "ignore": ["docs/.vitepress/cache/**"],
+}

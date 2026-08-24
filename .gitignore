@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+*.log
+
+.husky/_
+
+scripts/
+
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+docs/api/
