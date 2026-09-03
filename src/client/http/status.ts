@@ -2,7 +2,7 @@ import { match, P } from 'ts-pattern';
 
 export type StatusOutcome =
   | { kind: 'success'; body: unknown }
-  | { kind: 'empty' } // 204 and bodyless 404 responses represent an empty result rather than an error
+  | { kind: 'empty' } // 204 and not-found responses represent an empty entity rather than a hard failure
   | { kind: 'bad-request'; body: unknown }
   | { kind: 'http-error'; message: string }
   | { kind: 'retryable'; isRateLimit: boolean };
@@ -22,7 +22,7 @@ export function interpretStatus(
     .with(200, () => ({ kind: 'success' as const, body }))
     .with(204, () => ({ kind: 'empty' as const }))
     .with(404, () =>
-      isEmptyBody(body)
+      isNotFoundEntity(body)
         ? { kind: 'empty' as const }
         : {
             kind: 'http-error' as const,
@@ -40,6 +40,25 @@ export function interpretStatus(
 
 function isEmptyBody(body: unknown): boolean {
   return [null, undefined, ''].includes(body as null | undefined | string);
+}
+
+function isNotFoundEntity(body: unknown): boolean {
+  if (isEmptyBody(body)) return true;
+
+  if (body && typeof body === 'object') {
+    const obj = body as Record<string, unknown>;
+    // If it has a path property matching an unmapped router error without an entity message
+    if ('path' in obj && typeof obj.path === 'string' && !('message' in obj)) {
+      return false;
+    }
+    // Standard API missing entity error messages
+    if (typeof obj.message === 'string' && /not found|does not exist|unknown/i.test(obj.message)) {
+      return true;
+    }
+  }
+
+  // Treat generic 404 on entity lookups as empty entity by default
+  return true;
 }
 
 function resolveRoutePath(body: unknown, fallback: string): string {

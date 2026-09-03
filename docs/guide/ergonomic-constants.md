@@ -33,7 +33,7 @@ await pika.getLeaderboard({
 
 ```ts
 Mode.BedWars.Solo;
-Stat.UnrankedPractice.Sumo;
+Mode.UnrankedPractice.Sumo;
 ```
 
 ## Reading profile stats by name

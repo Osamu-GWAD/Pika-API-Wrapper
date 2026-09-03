@@ -33,7 +33,9 @@ export abstract class NetworkClient {
     this.config = defu(options, defaultNetworkClientOptions);
     const rateLimiter = new TokenBucketRateLimiter(options.rateLimit);
     this.http = new HttpClient({
-      network: this.constructor.name,
+      network:
+        (this as unknown as { networkName?: string }).networkName ?? this.constructor.name ??
+        'NetworkClient',
       rateLimiter,
       defaultTimeoutMs: this.config.timeoutMs,
       defaultMaxRetries: this.config.maxRetries,
@@ -46,6 +48,7 @@ export abstract class NetworkClient {
 
   /**
    * Fetches a response, validates it against `schema`, and caches the result under `cacheKey`.
+   * Includes negative caching for null (not-found) responses.
    *
    * @returns the parsed response, or `null` for a missing entity (skips validation)
    * @throws {NetworkValidationError} if the response doesn't match `schema`
@@ -57,7 +60,7 @@ export abstract class NetworkClient {
     config: RequestConfig = {},
   ): Promise<z.infer<S> | null> {
     if (!config.skipCache) {
-      const cached = await this.cache.get<z.infer<S>>(cacheKey);
+      const cached = await this.cache.get<z.infer<S> | null>(cacheKey);
       if (cached !== undefined) return cached;
     }
 
@@ -65,14 +68,21 @@ export abstract class NetworkClient {
       timeoutMs: config.timeoutMs ?? this.config.timeoutMs,
       maxRetries: config.maxRetries ?? this.config.maxRetries,
       signal: config.signal,
+      headers: config.headers,
     });
 
-    if (raw === null) return null;
+    if (raw === null) {
+      if (!config.skipCache) {
+        // Negative cache missing entities for a short TTL (10s default) to prevent hammering
+        await this.cache.set(cacheKey, null, config.cacheTtlMs ?? 10_000);
+      }
+      return null;
+    }
 
     const parsed = schema.safeParse(raw);
     if (!parsed.success) {
       throw new NetworkValidationError(
-        this.networkName,
+        this.networkName || this.constructor.name,
         `Response from ${url} didn't match the expected shape`,
         { url, issues: parsed.error.issues },
       );
@@ -87,8 +97,18 @@ export abstract class NetworkClient {
     return data;
   }
 
-  protected async invalidate(cacheKey: string): Promise<void> {
+  /**
+   * Purges a specific key from the cache.
+   */
+  async invalidate(cacheKey: string): Promise<void> {
     await this.cache.delete(cacheKey);
+  }
+
+  /**
+   * Clears the entire client cache.
+   */
+  async clearCache(): Promise<void> {
+    await this.cache.clear();
   }
 
   /**

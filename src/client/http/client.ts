@@ -28,6 +28,7 @@ export interface GetJsonOptions {
   timeoutMs?: number;
   maxRetries?: number;
   signal?: AbortSignal;
+  headers?: Record<string, string>;
 }
 
 export class HttpClient {
@@ -57,6 +58,10 @@ export class HttpClient {
         async () => {
           await this.rateLimiter.acquire();
 
+          if (options.signal?.aborted) {
+            throw new DOMException('This operation was aborted', 'AbortError');
+          }
+
           let response;
           try {
             response = await fetch.raw(url, {
@@ -64,9 +69,19 @@ export class HttpClient {
               signal: options.signal,
               ignoreResponseError: true,
               retry: false, // retry, backoff, and rate-limit handling are delegated to `withRetry`
-              headers: { Accept: 'application/json', 'User-Agent': this.userAgent },
+              headers: {
+                Accept: 'application/json',
+                'User-Agent': this.userAgent,
+                ...options.headers,
+              },
             });
           } catch (error) {
+            if (
+              options.signal?.aborted ||
+              (error instanceof Error && error.name === 'AbortError')
+            ) {
+              throw error;
+            }
             throw new NetworkHTTPError(
               this.network,
               `Error fetching ${url}: ${(error as Error)?.message ?? error}`,
@@ -103,8 +118,15 @@ export class HttpClient {
         },
         this.rateLimiter,
         maxRetries,
+        options.signal,
       );
     } catch (error) {
+      if (
+        options.signal?.aborted ||
+        (error instanceof Error && error.name === 'AbortError')
+      ) {
+        throw error;
+      }
       if (error instanceof NetworkAPIError) throw error;
       if (error instanceof RetrySignal) {
         throw error.isRateLimit

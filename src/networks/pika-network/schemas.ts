@@ -3,16 +3,23 @@ import { z } from 'zod';
 /**
  * numeric fields sometimes arrive as unrounded IEEE-754 string floats
  * (e.g. balance: "5158777955980.7333984375"; see docs section 3.5), and
- * sometimes as plain numbers. coerce either into a number.
+ * sometimes as plain numbers. coerce either into a number safely.
  */
-const numericString = z.union([z.string(), z.number()]).transform(Number);
+const numericString = z
+  .union([
+    z.number(),
+    z.string().refine((val) => val.trim() !== '' && !Number.isNaN(Number(val)), {
+      message: 'Expected valid numeric string',
+    }),
+  ])
+  .transform(Number);
 
 const leaderboardEntrySchema = z.object({
   place: z.number(),
   value: numericString,
   id: z.string(),
-  clan: z.string().optional(),
-  rank: z.string().optional(),
+  clan: z.string().nullable().optional(),
+  rank: z.string().nullable().optional(),
 });
 
 export const PikaNetworkLeaderboardResponseSchema = z.object({
@@ -61,9 +68,43 @@ const profileDonorRankSchema = z.object({
   expiry: z.number().optional(),
 });
 
+export const clanMemberSchema = z
+  .object({
+    user: z.object({
+      username: z.string(),
+    }),
+    joinDate: z.string().optional(),
+    rank: z.string().optional(),
+  })
+  .passthrough();
+export type ClanMember = z.infer<typeof clanMemberSchema>;
+
+/**
+ * GET /clans/{clanName}
+ */
+export const PikaNetworkClanResponseSchema = z
+  .object({
+    name: z.string().optional(),
+    tag: z.string().optional(),
+    trophies: z.number().optional(),
+    currentTrophies: z.number().optional(),
+    createdAt: z.union([z.number(), z.string()]).optional(),
+    creationTime: z.string().optional(),
+    members: z.array(clanMemberSchema).optional(),
+    owner: z.object({ username: z.string() }).optional(),
+    leveling: z
+      .object({
+        level: z.number().optional(),
+        exp: z.number().optional(),
+        totalExp: z.number().optional(),
+      })
+      .optional(),
+  })
+  .passthrough();
+export type PikaNetworkClanResponse = z.infer<typeof PikaNetworkClanResponseSchema>;
+
 /**
  * GET /profile/{username}
- * HACK: kept permissive since this endpoint isn't formally specced and fields may vary by account state
  */
 export const PikaNetworkProfileResponseSchema = z
   .object({
@@ -75,36 +116,14 @@ export const PikaNetworkProfileResponseSchema = z
     discord_boosting: z.boolean().optional(),
     rank: profileRankSchema.optional(),
     ranks: z.array(profileDonorRankSchema).optional(),
-    clan: z
-      .object({
-        name: z.string().optional(),
-        tag: z.string().optional(),
-      })
-      .nullable()
-      .optional(),
+    clan: PikaNetworkClanResponseSchema.nullable().optional(),
     friends: z.array(z.unknown()).optional(),
   })
   .passthrough();
 export type PikaNetworkProfileResponse = z.infer<typeof PikaNetworkProfileResponseSchema>;
 
 /**
- * GET /clans/{clanName}
- * HACK: kept permissive
- */
-export const PikaNetworkClanResponseSchema = z
-  .object({
-    name: z.string().optional(),
-    tag: z.string().optional(),
-    trophies: z.number().optional(),
-    createdAt: z.number().optional(),
-    members: z.array(z.unknown()).optional(),
-  })
-  .passthrough();
-export type PikaNetworkClanResponse = z.infer<typeof PikaNetworkClanResponseSchema>;
-
-/**
  * GET /recaps/{gameId}
- * HACK: kept permissive
  */
 export const PikaNetworkRecapResponseSchema = z.record(z.string(), z.unknown());
 export type PikaNetworkRecapResponse = z.infer<typeof PikaNetworkRecapResponseSchema>;

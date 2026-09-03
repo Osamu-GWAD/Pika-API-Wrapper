@@ -22,6 +22,10 @@ export function withPing<TBase extends PikaNetworkMixinConstructor>(
         const raw = await this.fetchAndValidate('pika-network:ping', url, pingSchema, {
           skipCache: true,
           ...config,
+          headers: {
+            Accept: 'text/plain, */*',
+            ...config?.headers,
+          },
         });
         return raw === 'Pong!';
       } catch {
