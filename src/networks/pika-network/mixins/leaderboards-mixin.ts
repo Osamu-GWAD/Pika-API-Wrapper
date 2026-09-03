@@ -1,5 +1,6 @@
 import {
   PikaNetworkRequiredMode,
+  PikaNetworkStatAliases,
   type PikaNetworkGamemode,
 } from '@/networks/pika-network/enums';
 import {
@@ -21,16 +22,16 @@ import type { PikaNetworkMixinConstructor } from '@/networks/pika-network/mixins
 import type { BatchOptions, BatchResult, RequestConfig } from '@/types';
 
 export interface LeaderboardsMixin {
-  getLeaderboard<G extends PikaNetworkGamemode>(
+  getLeaderboard<G extends PikaNetworkGamemode = PikaNetworkGamemode>(
     parameters: GetLeaderboardParams<G>,
     config?: RequestConfig,
   ): Promise<LeaderboardPage>;
-  getLeaderboards<G extends PikaNetworkGamemode>(
-    requests: GetLeaderboardParams<G>[],
+  getLeaderboards(
+    requests: GetLeaderboardParams<PikaNetworkGamemode>[],
     config?: RequestConfig,
     options?: BatchOptions,
   ): Promise<BatchResult<LeaderboardPage>[]>;
-  getTotals<G extends PikaNetworkGamemode>(
+  getTotals<G extends PikaNetworkGamemode = PikaNetworkGamemode>(
     parameters: GetTotalsParams<G>,
     config?: RequestConfig,
   ): Promise<PikaNetworkTotalsResponse>;
@@ -42,7 +43,7 @@ export function withLeaderboards<TBase extends PikaNetworkMixinConstructor>(
 ): TBase & (abstract new (...arguments_: any[]) => LeaderboardsMixin) {
   abstract class WithLeaderboards extends Base implements LeaderboardsMixin {
     /** global leaderboard for a stat, paginated */
-    async getLeaderboard<G extends PikaNetworkGamemode>(
+    async getLeaderboard<G extends PikaNetworkGamemode = PikaNetworkGamemode>(
       parameters: GetLeaderboardParams<G>,
       config?: RequestConfig,
     ): Promise<LeaderboardPage> {
@@ -52,15 +53,31 @@ export function withLeaderboards<TBase extends PikaNetworkMixinConstructor>(
         mode = resolveDefaultMode(gamemode),
         interval = 'total',
         page = 1,
-        limit = 15, // the API enforces a maximum page size of 15 regardless of the requested limit
+        limit = 15,
       } = parameters;
       assertValidCombination(gamemode, mode, interval);
 
-      const offset = Math.max(0, (page - 1) * limit);
-      const url =
-        `${this.baseUrl}/leaderboards?type=${gamemode}&stat=${String(stat)}` +
-        `&interval=${interval}&mode=${mode}&offset=${offset}&limit=${limit}`;
-      const cacheKey = `pika-network:leaderboard:${gamemode}:${String(stat)}:${mode}:${interval}:${offset}:${limit}`;
+      // PikaNetwork enforces a maximum limit of 15; clamp to avoid broken offsets
+      const effectiveLimit = Math.min(15, Math.max(1, limit));
+      const offset = Math.max(0, (page - 1) * effectiveLimit);
+
+      // Resolve stat aliases if configured (e.g. PROJECTILE_KILLS -> BOW_KILLS)
+      const statStr = String(stat);
+      const resolvedStat =
+        (PikaNetworkStatAliases as Record<string, Record<string, string>>)[gamemode]?.[statStr] ??
+        stat;
+
+      const query = new URLSearchParams({
+        type: gamemode,
+        stat: String(resolvedStat),
+        interval,
+        mode,
+        offset: String(offset),
+        limit: String(effectiveLimit),
+      });
+
+      const url = `${this.baseUrl}/leaderboards?${query.toString()}`;
+      const cacheKey = `pika-network:leaderboard:${gamemode}:${String(resolvedStat)}:${mode}:${interval}:${offset}:${effectiveLimit}`;
 
       const raw = await this.fetchAndValidate(
         cacheKey,
@@ -76,8 +93,8 @@ export function withLeaderboards<TBase extends PikaNetworkMixinConstructor>(
      *
      * each request is resolved independently and preserves input order.
      */
-    async getLeaderboards<G extends PikaNetworkGamemode>(
-      requests: GetLeaderboardParams<G>[],
+    async getLeaderboards(
+      requests: GetLeaderboardParams<PikaNetworkGamemode>[],
       config?: RequestConfig,
       options?: BatchOptions,
     ): Promise<BatchResult<LeaderboardPage>[]> {
@@ -90,14 +107,16 @@ export function withLeaderboards<TBase extends PikaNetworkMixinConstructor>(
     /**
      * server-wide aggregate stats for a gamemode (totals/averages/sums)
      */
-    async getTotals<G extends PikaNetworkGamemode>(
+    async getTotals<G extends PikaNetworkGamemode = PikaNetworkGamemode>(
       parameters: GetTotalsParams<G>,
       config?: RequestConfig,
     ) {
       const { gamemode } = parameters;
-      const extra =
-        gamemode === 'pillars' ? `&mode=${PikaNetworkRequiredMode.pillars}` : '';
-      const url = `${this.baseUrl}/leaderboards/total?type=${gamemode}${extra}`;
+      const params = new URLSearchParams({ type: gamemode });
+      if (gamemode === 'pillars') {
+        params.set('mode', PikaNetworkRequiredMode.pillars);
+      }
+      const url = `${this.baseUrl}/leaderboards/total?${params.toString()}`;
       const raw = await this.fetchAndValidate(
         `pika-network:totals:${gamemode}`,
         url,

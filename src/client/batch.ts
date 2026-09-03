@@ -8,7 +8,7 @@ import type { BatchOptions, BatchResult } from '@/types';
  * to a shared union.
  *
  * operations are settled independently by default; `throwOnError` aggregates
- * failures and throws after all operations have completed.
+ * failures and throws after all operations have completed, attaching partial results.
  */
 export async function runBatch<const T extends readonly (() => Promise<unknown>)[]>(
   operations: T,
@@ -34,8 +34,7 @@ export async function runBatch<const T extends readonly (() => Promise<unknown>)
       }),
     ),
   );
-  // `PQueue#add` types its return as possibly `void` to account for abort/timeout
-  // options we don't use here, so every settled entry is always a real result
+
   const results = settled as { [K in keyof T]: BatchResult<Awaited<ReturnType<T[K]>>> };
 
   if (options.throwOnError) {
@@ -43,10 +42,12 @@ export async function runBatch<const T extends readonly (() => Promise<unknown>)
       (result) => result.status === 'rejected',
     );
     if (failures.length > 0) {
-      throw new AggregateError(
+      const aggregateError = new AggregateError(
         failures.map((failure) => failure.reason),
         `${failures.length}/${settled.length} batch operations failed`,
       );
+      Object.assign(aggregateError, { results });
+      throw aggregateError;
     }
   }
 

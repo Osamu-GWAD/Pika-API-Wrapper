@@ -7,26 +7,26 @@ import type {
 } from '@/networks/pika-network/enums';
 import type { PikaNetworkLeaderboardResponse } from '@/networks/pika-network/schemas';
 
-export interface GetLeaderboardParams<G extends PikaNetworkGamemode> {
+export interface GetLeaderboardParams<G extends PikaNetworkGamemode = PikaNetworkGamemode> {
   gamemode: G;
-  stat: PikaNetworkStat<G>;
-  mode?: PikaNetworkMode<G>;
+  stat: PikaNetworkStat<G> | (string & {});
+  mode?: PikaNetworkMode<G> | (string & {});
   interval?: PikaNetworkInterval;
   /**
-  1-indexed page number
-  */
+   * 1-indexed page number
+   */
   page?: number;
   limit?: number;
 }
 
-export interface GetProfileStatsParams<G extends PikaNetworkGamemode> {
+export interface GetProfileStatsParams<G extends PikaNetworkGamemode = PikaNetworkGamemode> {
   username: string;
   gamemode: G;
-  mode?: PikaNetworkMode<G>;
+  mode?: PikaNetworkMode<G> | (string & {});
   interval?: PikaNetworkInterval;
 }
 
-export interface GetTotalsParams<G extends PikaNetworkGamemode> {
+export interface GetTotalsParams<G extends PikaNetworkGamemode = PikaNetworkGamemode> {
   gamemode: G;
 }
 
@@ -34,8 +34,8 @@ export interface LeaderboardEntry {
   place: number;
   value: number;
   id: string;
-  clan?: string;
-  rank?: string;
+  clan?: string | null;
+  rank?: string | null;
 }
 
 export interface LeaderboardPage {
@@ -76,8 +76,14 @@ export type ProfileStats = ProfileStat[] & { readonly StatKey: ProfileStatAccess
 
 /**
  * wraps a raw `ProfileStat[]` with the `.StatKey.<Gamemode>.<Stat>` accessor
+ * indexed via a Map for O(1) reads without mutating the caller's input array.
  */
 export function withStatKeyAccessor(stats: ProfileStat[]): ProfileStats {
+  const statMap = new Map<string, ProfileStat>();
+  for (const stat of stats) {
+    statMap.set(stat.statKey, stat);
+  }
+
   const accessor = {} as Record<string, Record<string, ProfileStat | null>>;
 
   for (const [gamemodeKey, gamemodeStats] of Object.entries(StatKey)) {
@@ -85,13 +91,13 @@ export function withStatKeyAccessor(stats: ProfileStat[]): ProfileStats {
     for (const [statFriendlyKey, rawStatKey] of Object.entries(gamemodeStats)) {
       Object.defineProperty(gamemodeAccessor, statFriendlyKey, {
         enumerable: true,
-        get: () => stats.find((stat) => stat.statKey === rawStatKey) ?? null,
+        get: () => statMap.get(rawStatKey) ?? null,
       });
     }
     accessor[gamemodeKey] = gamemodeAccessor;
   }
 
-  const result = stats as ProfileStats;
+  const result = [...stats] as ProfileStats;
   Object.defineProperty(result, 'StatKey', {
     value: accessor,
     enumerable: false,
@@ -101,6 +107,7 @@ export function withStatKeyAccessor(stats: ProfileStat[]): ProfileStats {
 }
 
 export {
+  type ClanMember,
   type PikaNetworkClanResponse,
   type PikaNetworkLeaderboardResponse,
   type PikaNetworkProfileResponse,

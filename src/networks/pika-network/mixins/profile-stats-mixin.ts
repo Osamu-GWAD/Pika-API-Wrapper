@@ -17,17 +17,17 @@ import type {
 import type { BatchOptions, BatchResult, RequestConfig } from '@/types';
 
 export interface ProfileStatsMixin {
-  getProfileStats<G extends PikaNetworkGamemode>(
+  getProfileStats<G extends PikaNetworkGamemode = PikaNetworkGamemode>(
     parameters: GetProfileStatsParams<G>,
     config?: RequestConfig,
   ): Promise<ProfileStats>;
-  getProfileStat<G extends PikaNetworkGamemode>(
+  getProfileStat<G extends PikaNetworkGamemode = PikaNetworkGamemode>(
     parameters: GetProfileStatsParams<G>,
-    statKey: PikaNetworkStatKey<G>,
+    statKey: PikaNetworkStatKey<G> | string,
     config?: RequestConfig,
   ): Promise<ProfileStat | null>;
-  getProfileStatsBatch<G extends PikaNetworkGamemode>(
-    requests: GetProfileStatsParams<G>[],
+  getProfileStatsBatch(
+    requests: GetProfileStatsParams<PikaNetworkGamemode>[],
     config?: RequestConfig,
     options?: BatchOptions,
   ): Promise<BatchResult<ProfileStats>[]>;
@@ -42,7 +42,7 @@ export function withProfileStats<TBase extends PikaNetworkMixinConstructor>(
      * returns an empty array (not an error) for a player who exists
      * but has never played that gamemode/mode.
      */
-    async getProfileStats<G extends PikaNetworkGamemode>(
+    async getProfileStats<G extends PikaNetworkGamemode = PikaNetworkGamemode>(
       parameters: GetProfileStatsParams<G>,
       config?: RequestConfig,
     ): Promise<ProfileStats> {
@@ -54,7 +54,13 @@ export function withProfileStats<TBase extends PikaNetworkMixinConstructor>(
       } = parameters;
       assertValidCombination(gamemode, mode, interval);
 
-      const url = `${this.baseUrl}/profile/${encodeURIComponent(username)}/leaderboard?type=${gamemode}&interval=${interval}&mode=${mode}`;
+      const query = new URLSearchParams({
+        type: gamemode,
+        interval,
+        mode,
+      });
+
+      const url = `${this.baseUrl}/profile/${encodeURIComponent(username)}/leaderboard?${query.toString()}`;
       const cacheKey = `pika-network:profile-stats:${username.toLowerCase()}:${gamemode}:${mode}:${interval}`;
 
       const raw = await this.fetchAndValidate(
@@ -68,7 +74,7 @@ export function withProfileStats<TBase extends PikaNetworkMixinConstructor>(
       const results: ProfileStat[] = Object.entries(raw).map(([statKey, stat]) => ({
         statKey,
         totalTracked: stat.metadata.total,
-        hasScore: stat.entries !== null,
+        hasScore: Boolean(stat.entries && stat.entries.length > 0),
         place: stat.entries?.[0]?.place ?? null,
         value: stat.entries?.[0]?.value ?? null,
       }));
@@ -82,9 +88,9 @@ export function withProfileStats<TBase extends PikaNetworkMixinConstructor>(
      *
      * `null` if the player has no score for it.
      */
-    async getProfileStat<G extends PikaNetworkGamemode>(
+    async getProfileStat<G extends PikaNetworkGamemode = PikaNetworkGamemode>(
       parameters: GetProfileStatsParams<G>,
-      statKey: PikaNetworkStatKey<G>,
+      statKey: PikaNetworkStatKey<G> | string,
       config?: RequestConfig,
     ): Promise<ProfileStat | null> {
       const stats = await this.getProfileStats(parameters, config);
@@ -96,8 +102,8 @@ export function withProfileStats<TBase extends PikaNetworkMixinConstructor>(
      *
      * preserves input order and returns an independent result for each lookup.
      */
-    async getProfileStatsBatch<G extends PikaNetworkGamemode>(
-      requests: GetProfileStatsParams<G>[],
+    async getProfileStatsBatch(
+      requests: GetProfileStatsParams<PikaNetworkGamemode>[],
       config?: RequestConfig,
       options?: BatchOptions,
     ): Promise<BatchResult<ProfileStats>[]> {

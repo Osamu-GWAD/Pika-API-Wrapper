@@ -25,6 +25,11 @@ export interface RequestConfig {
    * abort signal to cancel the request
    */
   signal?: AbortSignal;
+
+  /**
+   * additional custom headers for this request
+   */
+  headers?: Record<string, string>;
 }
 
 export type BatchResult<T> =
